@@ -1,6 +1,9 @@
 # Secrets
 .env
 
+# Local Claude Code context
+CLAUDE.md
+
 # Python
 .venv/
 __pycache__/
