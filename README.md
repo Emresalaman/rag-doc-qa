@@ -2,6 +2,8 @@
 
 Ask questions about a PDF or text document and get answers that cite the passages they came from.
 
+**[Try the live demo](https://rag-doc-app-8jwjzkvu9jgy5h8esrkr2e.streamlit.app/)**. It may take a moment to wake up, and it can stop answering for the day when its free API quota runs out. Do not upload private documents.
+
 ## Problem
 
 Finding one fact in a long document is slow, and a general-purpose LLM does not know what your document says. Asked anyway, it may invent an answer.
