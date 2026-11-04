@@ -1,0 +1,15 @@
+Northwind Example Co. Remote Work Policy (sample document)
+
+Eligibility. Employees may work remotely after completing a three-month onboarding period. Interns and employees on probation must work from the office unless their manager approves an exception in writing.
+
+Working hours. Remote employees must be available between 10:00 and 16:00 local time. Outside those core hours, they may organize their schedule freely as long as they complete 40 hours per week.
+
+Equipment. The company provides a laptop and a monitor to every remote employee. Employees also receive a one-time home office allowance of 500 euros, which can be used for a desk, a chair, or a headset. Receipts must be submitted within 30 days of purchase.
+
+Internet costs. The company reimburses up to 30 euros per month for home internet. Reimbursement requests are filed through the finance portal by the fifth day of the following month.
+
+Security. All company work must be done over the corporate VPN. Company data must not be stored on personal devices or personal cloud accounts. A lost or stolen laptop must be reported to the IT team within 24 hours.
+
+Working abroad. Employees may work from another country for up to 20 days per calendar year. Requests must be submitted to human resources at least two weeks before travel, because longer stays can create tax obligations.
+
+Office visits. Remote employees are expected to visit the office for the quarterly planning meeting. The company covers travel and accommodation costs for these visits.
