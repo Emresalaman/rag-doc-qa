@@ -62,5 +62,6 @@ The sources list is shortened here. A question the document cannot answer, such 
 - Scanned PDFs are not supported, because there is no OCR step.
 - The index lives in memory, so it is rebuilt whenever the app restarts.
 - Each question is answered on its own, with no chat history.
+- The web app allows 10 questions per session, 100 per day, and documents up to 1,000 chunks, because the public demo spends one shared API quota. The counters live in memory, so they reset when the session or the app restarts.
 - Answer quality has been checked on only three sample questions, not measured with an evaluation set.
 - The sample document is fictional.

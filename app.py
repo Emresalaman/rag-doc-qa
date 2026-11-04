@@ -1,7 +1,9 @@
 """Streamlit interface: pick a document, ask a question, read a cited answer."""
 
 import os
+from datetime import datetime, timezone
 from pathlib import Path
+from threading import Lock
 
 import chromadb
 import streamlit as st
@@ -14,6 +16,39 @@ from retrieve import MODEL_NAME, build_index, chunk_text, extract_text, retrieve
 
 SAMPLE_PATH = Path(__file__).parent / "samples" / "remote_work_policy.txt"
 TOP_K = 3
+
+# The public demo spends the owner's API quota, so usage and document size are capped.
+MAX_QUESTIONS_PER_SESSION = 10
+MAX_QUESTIONS_PER_DAY = 100
+MAX_QUESTION_LENGTH = 500
+MAX_CHUNKS = 1000
+
+
+class DocumentTooLargeError(Exception):
+    """Raised when a document would take too long to embed on the demo's CPU."""
+
+
+@st.cache_resource
+def daily_usage() -> dict:
+    """Return the question counter shared by all sessions of this server process."""
+    return {"date": None, "count": 0, "lock": Lock()}
+
+
+def reserve_question() -> str | None:
+    """Count a question against the limits; return a message if a limit is reached."""
+    used = st.session_state.get("questions_asked", 0)
+    if used >= MAX_QUESTIONS_PER_SESSION:
+        return f"This demo allows {MAX_QUESTIONS_PER_SESSION} questions per session."
+    usage = daily_usage()
+    today = datetime.now(timezone.utc).date()
+    with usage["lock"]:
+        if usage["date"] != today:
+            usage.update(date=today, count=0)
+        if usage["count"] >= MAX_QUESTIONS_PER_DAY:
+            return "The demo reached its daily question limit. Please try again tomorrow."
+        usage["count"] += 1
+    st.session_state["questions_asked"] = used + 1
+    return None
 
 
 @st.cache_resource(show_spinner="Loading the embedding model...")
@@ -29,6 +64,8 @@ def index_document(
 ) -> chromadb.Collection | None:
     """Index a document once per content; return None if it has no extractable text."""
     chunks = chunk_text(extract_text(data, filename))
+    if len(chunks) > MAX_CHUNKS:
+        raise DocumentTooLargeError
     return build_index(chunks, _embedder) if chunks else None
 
 
@@ -64,14 +101,26 @@ def main() -> None:
     except (PdfReadError, UnicodeDecodeError):
         st.error("This file could not be read. Use a valid, unencrypted PDF or a UTF-8 text file.")
         st.stop()
+    except DocumentTooLargeError:
+        st.error("This document is too large for the demo. Try a shorter one.")
+        st.stop()
     if collection is None:
         st.error("No text was found in this file. Scanned PDFs are not supported.")
         st.stop()
 
     with st.form("question_form"):
-        question = st.text_input("Your question", placeholder="How much is the home office allowance?")
+        question = st.text_input(
+            "Your question",
+            placeholder="How much is the home office allowance?",
+            max_chars=MAX_QUESTION_LENGTH,
+        )
         submitted = st.form_submit_button("Ask")
     if not submitted or not question.strip():
+        return
+
+    limit_message = reserve_question()
+    if limit_message:
+        st.warning(limit_message)
         return
 
     matches = retrieve(question, collection, embedder, min(TOP_K, collection.count()))
