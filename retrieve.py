@@ -1,6 +1,8 @@
 """Minimal retrieval pipeline: load -> chunk -> embed -> search."""
 
 import argparse
+from hashlib import sha256
+from io import BytesIO
 from pathlib import Path
 
 import chromadb
@@ -16,12 +18,17 @@ CHUNK_SIZE = 400
 CHUNK_OVERLAP = 50
 
 
-def load_document(path: Path) -> str:
-    """Return the plain text of a PDF or text file."""
-    if path.suffix.lower() == ".pdf":
-        pages = PdfReader(path).pages
+def extract_text(data: bytes, filename: str) -> str:
+    """Return the plain text of a PDF or UTF-8 text file given as bytes."""
+    if Path(filename).suffix.lower() == ".pdf":
+        pages = PdfReader(BytesIO(data)).pages
         return "\n\n".join(page.extract_text() or "" for page in pages)
-    return path.read_text(encoding="utf-8")
+    return data.decode("utf-8")
+
+
+def load_document(path: Path) -> str:
+    """Return the plain text of a PDF or text file on disk."""
+    return extract_text(path.read_bytes(), path.name)
 
 
 def chunk_text(text: str) -> list[str]:
@@ -35,16 +42,20 @@ def chunk_text(text: str) -> list[str]:
 
 def build_index(chunks: list[str], model: SentenceTransformer) -> chromadb.Collection:
     """Embed the chunks and store them in an in-memory Chroma collection."""
+    # In-memory Chroma clients share state within a process, so each document
+    # gets a collection named after its content instead of a fixed name.
+    digest = sha256("\0".join(chunks).encode("utf-8")).hexdigest()[:32]
     client = chromadb.EphemeralClient()
-    collection = client.create_collection(
-        name="documents",
+    collection = client.get_or_create_collection(
+        name=f"doc-{digest}",
         configuration={"hnsw": {"space": "cosine"}},
     )
-    collection.add(
-        ids=[f"chunk-{i}" for i in range(len(chunks))],
-        documents=chunks,
-        embeddings=model.encode(chunks).tolist(),
-    )
+    if collection.count() == 0:
+        collection.add(
+            ids=[f"chunk-{i}" for i in range(len(chunks))],
+            documents=chunks,
+            embeddings=model.encode(chunks).tolist(),
+        )
     return collection
 
 

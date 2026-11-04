@@ -36,6 +36,22 @@ def format_context(chunks: list[str]) -> str:
     return "\n\n".join(f"[{i}] {chunk}" for i, chunk in enumerate(chunks, start=1))
 
 
+def generate_answer(question: str, sources: list[str], api_key: str) -> tuple[str, str | None]:
+    """Answer from the given chunks; return the answer and the model that wrote it."""
+    # Temperature 0 favors consistent, factual answers over creative ones.
+    # Few retries so a busy primary model fails fast and the fallback takes over.
+    primary = ChatGoogleGenerativeAI(
+        model=LLM_MODEL, google_api_key=api_key, temperature=0, max_retries=1, timeout=30
+    )
+    # The fallback model uses fixed sampling defaults, so it takes no temperature.
+    fallback = ChatGoogleGenerativeAI(
+        model=FALLBACK_MODEL, google_api_key=api_key, max_retries=1, timeout=30
+    )
+    chain = PROMPT | primary.with_fallbacks([fallback])
+    response = chain.invoke({"context": format_context(sources), "question": question})
+    return response.text, response.response_metadata.get("model_name")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Ask a question about a document.")
     parser.add_argument("document", type=Path, help="Path to a PDF or text file")
@@ -54,19 +70,9 @@ def main() -> None:
     matches = retrieve(args.question, collection, embedder, min(args.top_k, len(chunks)))
     sources = [chunk for chunk, _ in matches]
 
-    # Temperature 0 favors consistent, factual answers over creative ones.
-    # Few retries so a busy primary model fails fast and the fallback takes over.
-    primary = ChatGoogleGenerativeAI(
-        model=LLM_MODEL, google_api_key=api_key, temperature=0, max_retries=1, timeout=30
-    )
-    # The fallback model uses fixed sampling defaults, so it takes no temperature.
-    fallback = ChatGoogleGenerativeAI(
-        model=FALLBACK_MODEL, google_api_key=api_key, max_retries=1, timeout=30
-    )
-    chain = PROMPT | primary.with_fallbacks([fallback])
-    response = chain.invoke({"context": format_context(sources), "question": args.question})
+    answer, model_name = generate_answer(args.question, sources, api_key)
 
-    print(f"{response.text}\n\nModel: {response.response_metadata.get('model_name')}\nSources:")
+    print(f"{answer}\n\nModel: {model_name}\nSources:")
     for i, (chunk, score) in enumerate(matches, start=1):
         print(f"[{i}] similarity={score:.3f} {chunk[:80]}...")
 
