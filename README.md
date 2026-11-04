@@ -27,14 +27,24 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 Copy-Item .env.example .env   # then put your key in .env
-python ask.py samples\remote_work_policy.txt "How much is the home office allowance?"
+streamlit run app.py
 ```
 
-The embedding model downloads on the first run.
+The app opens at http://localhost:8501. The embedding model downloads on the first run.
+
+To use the command line instead of the web interface:
+
+```powershell
+python ask.py samples\remote_work_policy.txt "How much is the home office allowance?"
+```
 
 On Gemini's free tier, Google may use submitted content to improve its products, and the app sends the retrieved chunks and your question. Do not use the free tier with private documents.
 
 ## Example output
+
+![The app answering a question about the sample document, citing source 1](docs/screenshot.png)
+
+From the command line:
 
 ```text
 > python ask.py samples\remote_work_policy.txt "Yurt dışından kaç gün çalışabilirim?"
@@ -50,6 +60,7 @@ The sources list is shortened here. A question the document cannot answer, such 
 ## Limitations
 
 - Scanned PDFs are not supported, because there is no OCR step.
-- The index is rebuilt on every run.
+- The index lives in memory, so it is rebuilt whenever the app restarts.
+- Each question is answered on its own, with no chat history.
 - Answer quality has been checked on only three sample questions, not measured with an evaluation set.
 - The sample document is fictional.
