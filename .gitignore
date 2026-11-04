@@ -5,6 +5,9 @@
 # Local Claude Code context
 CLAUDE.md
 
+# Personal notes
+KEYWORDS.md
+
 # Python
 .venv/
 __pycache__/
