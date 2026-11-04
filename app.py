@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from pypdf.errors import PdfReadError
 from sentence_transformers import SentenceTransformer
 
-from ask import generate_answer
+from ask import LLMUnavailableError, generate_answer
 from retrieve import MODEL_NAME, build_index, chunk_text, extract_text, retrieve
 
 SAMPLE_PATH = Path(__file__).parent / "samples" / "remote_work_policy.txt"
@@ -19,7 +19,7 @@ TOP_K = 3
 
 # The public demo spends the owner's API quota, so usage and document size are capped.
 MAX_QUESTIONS_PER_SESSION = 10
-MAX_QUESTIONS_PER_DAY = 100
+MAX_QUESTIONS_PER_DAY = 50
 MAX_QUESTION_LENGTH = 500
 MAX_CHUNKS = 1000
 
@@ -49,6 +49,16 @@ def reserve_question() -> str | None:
         usage["count"] += 1
     st.session_state["questions_asked"] = used + 1
     return None
+
+
+def unavailable_message(codes: list[str]) -> str:
+    """Explain a model failure; only status codes reach the page, never full API messages."""
+    if all(code == "429" for code in codes):
+        return "The demo used up its free model quota for now. Please try again tomorrow."
+    return (
+        "The language model is unavailable right now. Please try again later. "
+        f"(Error codes: {', '.join(codes)})"
+    )
 
 
 @st.cache_resource(show_spinner="Loading the embedding model...")
@@ -127,10 +137,8 @@ def main() -> None:
     try:
         with st.spinner("Writing the answer..."):
             answer, model_name = generate_answer(question, [chunk for chunk, _ in matches], api_key)
-    except Exception as error:
-        # Keep the API's details out of the page; they may be shown to anyone using the demo.
-        print(f"LLM request failed: {type(error).__name__}")
-        st.error("The language model is unavailable right now. Please try again in a minute.")
+    except LLMUnavailableError as error:
+        st.error(unavailable_message(error.codes))
         st.stop()
 
     st.subheader("Answer")

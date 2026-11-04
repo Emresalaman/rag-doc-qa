@@ -16,7 +16,7 @@ This project uses retrieval-augmented generation (RAG):
 4. **Search** an in-memory vector store for the chunks closest to the question (Chroma, cosine similarity).
 5. **Generate** an answer from those chunks only, with citations (Gemini through LangChain).
 
-If the primary model is unavailable, the app falls back to a second Gemini model. The output shows which model answered.
+If a model is unavailable or out of quota, the app tries the next of three Gemini models. The output shows which model answered.
 
 ## How to run
 
@@ -62,6 +62,7 @@ The sources list is shortened here. A question the document cannot answer, such 
 - Scanned PDFs are not supported, because there is no OCR step.
 - The index lives in memory, so it is rebuilt whenever the app restarts.
 - Each question is answered on its own, with no chat history.
-- The web app allows 10 questions per session, 100 per day, and documents up to 1,000 chunks, because the public demo spends one shared API quota. The counters live in memory, so they reset when the session or the app restarts.
+- The web app allows 10 questions per session, 50 per day, and documents up to 1,000 chunks, because the public demo spends one shared API quota. The counters live in memory, so they reset when the session or the app restarts.
+- Gemini's free tier has its own daily limits, as low as 20 requests per model at the time of writing. When all three models reach theirs, the app cannot answer until the quota resets.
 - Answer quality has been checked on only three sample questions, not measured with an evaluation set.
 - The sample document is fictional.

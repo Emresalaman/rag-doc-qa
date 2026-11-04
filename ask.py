@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -13,7 +14,8 @@ from sentence_transformers import SentenceTransformer
 from retrieve import MODEL_NAME, build_index, chunk_text, load_document, retrieve
 
 LLM_MODEL = "gemini-3.8-flash"
-FALLBACK_MODEL = "gemini-3.6-flash"
+# Free-tier quotas are per model, so each fallback also adds daily capacity.
+FALLBACK_MODELS = ("gemini-3.6-flash", "gemini-3.5-flash-lite")
 
 # The model may only use the retrieved context, which keeps answers grounded in the document.
 PROMPT = ChatPromptTemplate.from_messages(
@@ -31,25 +33,48 @@ PROMPT = ChatPromptTemplate.from_messages(
 )
 
 
+class LLMUnavailableError(Exception):
+    """Raised when every model failed; holds one HTTP status per model."""
+
+    def __init__(self, codes: list[str]) -> None:
+        super().__init__(f"All models failed with codes: {', '.join(codes)}")
+        self.codes = codes
+
+
 def format_context(chunks: list[str]) -> str:
     """Number the chunks so the model can cite them."""
     return "\n\n".join(f"[{i}] {chunk}" for i, chunk in enumerate(chunks, start=1))
 
 
+def error_code(error: Exception) -> str:
+    """Return the HTTP status in an API error, without any other details of the message."""
+    match = re.search(r"\b[45]\d{2}\b", str(error))
+    return match.group() if match else "unknown"
+
+
 def generate_answer(question: str, sources: list[str], api_key: str) -> tuple[str, str | None]:
     """Answer from the given chunks; return the answer and the model that wrote it."""
-    # Temperature 0 favors consistent, factual answers over creative ones.
     # Few retries so a busy primary model fails fast and the fallback takes over.
-    primary = ChatGoogleGenerativeAI(
-        model=LLM_MODEL, google_api_key=api_key, temperature=0, max_retries=1, timeout=30
-    )
-    # The fallback model uses fixed sampling defaults, so it takes no temperature.
-    fallback = ChatGoogleGenerativeAI(
-        model=FALLBACK_MODEL, google_api_key=api_key, max_retries=1, timeout=30
-    )
-    chain = PROMPT | primary.with_fallbacks([fallback])
-    response = chain.invoke({"context": format_context(sources), "question": question})
-    return response.text, response.response_metadata.get("model_name")
+    settings = {"google_api_key": api_key, "max_retries": 1, "timeout": 30}
+    # Temperature 0 favors consistent, factual answers over creative ones.
+    # The fallback models use fixed sampling defaults, so they take no temperature.
+    models = [
+        ChatGoogleGenerativeAI(model=LLM_MODEL, temperature=0, **settings),
+        *(ChatGoogleGenerativeAI(model=name, **settings) for name in FALLBACK_MODELS),
+    ]
+    inputs = {"context": format_context(sources), "question": question}
+
+    # A manual loop instead of with_fallbacks, which only reports the first model's error.
+    codes = []
+    for model in models:
+        try:
+            response = (PROMPT | model).invoke(inputs)
+            return response.text, response.response_metadata.get("model_name")
+        except Exception as error:
+            code = error_code(error)
+            print(f"{model.model} failed: {type(error).__name__} {code}")
+            codes.append(code)
+    raise LLMUnavailableError(codes)
 
 
 def main() -> None:
@@ -70,7 +95,10 @@ def main() -> None:
     matches = retrieve(args.question, collection, embedder, min(args.top_k, len(chunks)))
     sources = [chunk for chunk, _ in matches]
 
-    answer, model_name = generate_answer(args.question, sources, api_key)
+    try:
+        answer, model_name = generate_answer(args.question, sources, api_key)
+    except LLMUnavailableError as error:
+        sys.exit(str(error))
 
     print(f"{answer}\n\nModel: {model_name}\nSources:")
     for i, (chunk, score) in enumerate(matches, start=1):
