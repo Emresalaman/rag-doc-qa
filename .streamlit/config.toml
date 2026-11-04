@@ -1,0 +1,6 @@
+[server]
+# Megabytes. A small limit protects the demo's memory and the API quota.
+maxUploadSize = 10
+
+[browser]
+gatherUsageStats = false
